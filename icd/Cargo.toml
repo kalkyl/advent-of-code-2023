@@ -1,0 +1,15 @@
+[package]
+name = "aoc-2023-icd"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+defmt = ["dep:defmt", "heapless/defmt-03"]
+
+[dependencies]
+defmt = { version = "0.3", optional = true }
+heapless = { version = "0.8.0", features = ["serde"] }
+postcard = "1.0.8"
+serde = { version = "1.0.193", default-features = false, features = ["derive"] }
