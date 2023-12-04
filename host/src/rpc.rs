@@ -12,13 +12,13 @@ use tokio::select;
 use tokio::sync::mpsc::Sender;
 
 pub fn new_client<E: DeserializeOwned + Schema>(device: Device, err_uri_path: &str, outgoing_depth: usize) -> HostClient<E> {
-    let port = UsbComm::new(device);
+    let mut comm = UsbComm::new(device);
     let (client, wire) = HostClient::<E>::new_manual(err_uri_path, outgoing_depth);
-    tokio::task::spawn(async move { wire_worker(port, wire).await });
+    tokio::task::spawn(async move { comm.wire_worker(wire).await });
     client
 }
 
-pub struct UsbComm {
+struct UsbComm {
     interface: Interface,
 }
 
@@ -41,88 +41,87 @@ impl UsbComm {
         }
         Err(())
     }
-}
+    async fn wire_worker(&mut self, ctx: WireContext) {
+        let mut buf = [0u8; 1024];
+        let mut acc = CobsAccumulator::<1024>::new();
+        let mut subs: HashMap<Key, Sender<RpcFrame>> = HashMap::new();
 
-pub async fn wire_worker(mut port: UsbComm, ctx: WireContext) {
-    let mut buf = [0u8; 1024];
-    let mut acc = CobsAccumulator::<1024>::new();
-    let mut subs: HashMap<Key, Sender<RpcFrame>> = HashMap::new();
+        let WireContext { mut outgoing, incoming, mut new_subs } = ctx;
 
-    let WireContext { mut outgoing, incoming, mut new_subs } = ctx;
+        loop {
+            // Wait for EITHER a serialized request, OR some data from the embedded device
+            select! {
+                sub = new_subs.recv() => {
+                    let Some(si) = sub else {
+                        return;
+                    };
 
-    loop {
-        // Wait for EITHER a serialized request, OR some data from the embedded device
-        select! {
-            sub = new_subs.recv() => {
-                let Some(si) = sub else {
-                    return;
-                };
-
-                subs.insert(si.key, si.tx);
-            }
-            out = outgoing.recv() => {
-                // Receiver returns None when all Senders have hung up
-                let Some(msg) = out else {
-                    return;
-                };
-
-                // Turn the serialized message into a COBS encoded message
-                //
-                // TODO: this is a little wasteful, payload is already a vec,
-                // then we serialize it to a second vec, then encode that to
-                // a third cobs-encoded vec. Oh well.
-                let msg = msg.to_bytes();
-                let mut msg = cobs::encode_vec(&msg);
-                msg.push(0);
-
-
-                // And send it!
-                if port.write(&msg).await.is_err() {
-                    // I guess the serial port hung up.
-                    return;
+                    subs.insert(si.key, si.tx);
                 }
-            }
-            inc = port.read(&mut buf) => {
-                // if read errored, we're done
-                let Ok(used) = inc else {
-                    return;
-                };
-                let mut window = &buf[..used];
+                out = outgoing.recv() => {
+                    // Receiver returns None when all Senders have hung up
+                    let Some(msg) = out else {
+                        return;
+                    };
 
-                'cobs: while !window.is_empty() {
-                    window = match acc.feed(window) {
-                        // Consumed the whole USB frame
-                        FeedResult::Consumed => break 'cobs,
-                        // Silently ignore line errors
-                        // TODO: probably add tracing here
-                        FeedResult::OverFull(new_wind) => new_wind,
-                        FeedResult::DeserError(new_wind) => new_wind,
-                        // We got a message! Attempt to dispatch it
-                        FeedResult::Success { data, remaining } => {
-                            // Attempt to extract a header so we can get the sequence number
-                            if let Ok((hdr, body)) = extract_header_from_bytes(data) {
-                                // Got a header, turn it into a frame
-                                let frame = RpcFrame { header: hdr.clone(), body: body.to_vec() };
+                    // Turn the serialized message into a COBS encoded message
+                    //
+                    // TODO: this is a little wasteful, payload is already a vec,
+                    // then we serialize it to a second vec, then encode that to
+                    // a third cobs-encoded vec. Oh well.
+                    let msg = msg.to_bytes();
+                    let mut msg = cobs::encode_vec(&msg);
+                    msg.push(0);
 
-                                // Give priority to subscriptions. TBH I only do this because I know a hashmap
-                                // lookup is cheaper than a waitmap search.
-                                if let Some(tx) = subs.get_mut(&hdr.key) {
-                                    // Yup, we have a subscription
-                                    if tx.send(frame).await.is_err() {
-                                        // But if sending failed, the listener is gone, so drop it
-                                        subs.remove(&hdr.key);
-                                    }
-                                } else {
-                                    // Wake the given sequence number. If the WaitMap is closed, we're done here
-                                    if let Err(ProcessError::Closed) = incoming.process(frame) {
-                                        return;
+
+                    // And send it!
+                    if self.write(&msg).await.is_err() {
+                        // I guess the serial port hung up.
+                        return;
+                    }
+                }
+                inc = self.read(&mut buf) => {
+                    // if read errored, we're done
+                    let Ok(used) = inc else {
+                        return;
+                    };
+                    let mut window = &buf[..used];
+
+                    'cobs: while !window.is_empty() {
+                        window = match acc.feed(window) {
+                            // Consumed the whole USB frame
+                            FeedResult::Consumed => break 'cobs,
+                            // Silently ignore line errors
+                            // TODO: probably add tracing here
+                            FeedResult::OverFull(new_wind) => new_wind,
+                            FeedResult::DeserError(new_wind) => new_wind,
+                            // We got a message! Attempt to dispatch it
+                            FeedResult::Success { data, remaining } => {
+                                // Attempt to extract a header so we can get the sequence number
+                                if let Ok((hdr, body)) = extract_header_from_bytes(data) {
+                                    // Got a header, turn it into a frame
+                                    let frame = RpcFrame { header: hdr.clone(), body: body.to_vec() };
+
+                                    // Give priority to subscriptions. TBH I only do this because I know a hashmap
+                                    // lookup is cheaper than a waitmap search.
+                                    if let Some(tx) = subs.get_mut(&hdr.key) {
+                                        // Yup, we have a subscription
+                                        if tx.send(frame).await.is_err() {
+                                            // But if sending failed, the listener is gone, so drop it
+                                            subs.remove(&hdr.key);
+                                        }
+                                    } else {
+                                        // Wake the given sequence number. If the WaitMap is closed, we're done here
+                                        if let Err(ProcessError::Closed) = incoming.process(frame) {
+                                            return;
+                                        }
                                     }
                                 }
-                            }
 
-                            remaining
-                        }
-                    };
+                                remaining
+                            }
+                        };
+                    }
                 }
             }
         }
