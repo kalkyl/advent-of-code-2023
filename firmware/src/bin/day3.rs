@@ -3,12 +3,12 @@
 #![feature(type_alias_impl_trait)]
 
 use aoc_2023_firmware::{bsp, rpc};
-use aoc_2023_icd::day3::{EndpointOne, Engine, EngineReq, EngineResp, Number, Req1, Resp1, Symbol, TopicOne};
+use aoc_2023_icd::day3::{Engine, EngineReq, EngineResp, Number, Symbol};
 use defmt::info;
 use embassy_executor::Spawner;
 use heapless::{String, Vec};
 use postcard_rpc::headered::extract_header_from_bytes;
-use postcard_rpc::{Endpoint, Topic};
+use postcard_rpc::Endpoint;
 use {defmt_rtt as _, panic_probe as _};
 
 #[embassy_executor::main]
@@ -31,12 +31,6 @@ async fn usb_task(mut server: rpc::Server) {
                 Ok(frame) => {
                     if let Ok((hdr, body)) = extract_header_from_bytes(&frame) {
                         match hdr.key {
-                            EndpointOne::REQ_KEY => {
-                                let msg = postcard::from_bytes::<<EndpointOne as postcard_rpc::Endpoint>::Request>(body).unwrap();
-                                info!("REQ: {:?}", defmt::Debug2Format(&msg));
-                                server.reply::<EndpointOne>(hdr.seq_no, &Resp1 { c: [3; 8], d: 4 }).await.unwrap();
-                                server.publish::<TopicOne>(0, &Req1 { a: 5, b: 6 }).await.unwrap();
-                            }
                             Engine::REQ_KEY => {
                                 let msg = postcard::from_bytes::<<Engine as postcard_rpc::Endpoint>::Request>(body).unwrap();
                                 match msg {
@@ -95,10 +89,6 @@ async fn usb_task(mut server: rpc::Server) {
                                         prev_line.replace((numbers, symbols));
                                     }
                                 }
-                            }
-                            TopicOne::TOPIC_KEY => {
-                                let msg = postcard::from_bytes::<<TopicOne as postcard_rpc::Topic>::Message>(body).unwrap();
-                                info!("TOPIC: {:?}", defmt::Debug2Format(&msg));
                             }
                             _ => {}
                         }
