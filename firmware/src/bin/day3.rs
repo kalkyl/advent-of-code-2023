@@ -2,7 +2,7 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
-use aoc_2023_firmware::bsp;
+use aoc_2023_firmware::{bsp, rpc};
 use aoc_2023_icd::day3::{EndpointOne, Engine, EngineReq, EngineResp, Number, Req1, Resp1, Symbol, TopicOne};
 use defmt::info;
 use embassy_executor::Spawner;
@@ -10,7 +10,6 @@ use heapless::{String, Vec};
 use postcard_rpc::headered::extract_header_from_bytes;
 use postcard_rpc::{Endpoint, Topic};
 use {defmt_rtt as _, panic_probe as _};
-use aoc_2023_firmware::rpc;
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {

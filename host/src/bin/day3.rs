@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 use std::error::Error;
 use std::str::FromStr;
-use heapless::String;
-use aoc_2023_icd::day3::{WireError, Engine, EngineReq, Number};
+
+use aoc_2023_icd::day3::{Engine, EngineReq, Number, WireError};
 use aoc_2023_icd::{PID, VID};
+use heapless::String;
 use nusb::transfer::{Completion, RequestBuffer};
 use nusb::Interface;
 use postcard_rpc::host_client::HostClient;
@@ -14,7 +15,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let di = nusb::list_devices().unwrap().find(|d| d.vendor_id() == VID && d.product_id() == PID).expect("no device found");
     let device = di.open().expect("error opening device");
     let interface = device.claim_interface(0).expect("error claiming interface");
-    let port = UsbComm::new(interface);
+    let port = usb::UsbComm::new(interface);
 
     let (client, wire) = HostClient::<WireError>::new_manual("error", 8);
     tokio::task::spawn(async move { rpc::wire_worker(port, wire).await });
@@ -24,13 +25,11 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let input = fs::read_to_string("../input/day3.txt").await?;
     for line in input.lines() {
         match client.send_resp::<Engine>(&EngineReq::Data(String::from_str(line).unwrap())).await {
-
-            Ok(resp) => 
-                parts.extend(resp.result.into_iter()),
-                _ => {
-                    println!("Error");
-                    break;
-                }
+            Ok(resp) => parts.extend(resp.result.into_iter()),
+            _ => {
+                println!("Error");
+                break;
+            }
         }
     }
     let sum_a = parts.iter().map(|p| p.value as u32).sum::<u32>();
@@ -41,7 +40,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
 
 mod usb {
     use super::*;
-    
+
     pub struct UsbComm {
         bulk_out_ep: u8,
         bulk_in_ep: u8,
@@ -56,12 +55,12 @@ mod usb {
                 interface,
             }
         }
-    
+
         pub async fn write(&mut self, data: &[u8]) -> Result<(), ()> {
             let _ = self.interface.bulk_out(self.bulk_out_ep, data.into()).await;
             Ok(())
         }
-    
+
         pub async fn read(&mut self, buf: &mut [u8]) -> Result<usize, ()> {
             if let Completion { data, status: Ok(()) } = self.interface.bulk_in(self.bulk_in_ep, RequestBuffer::new(4096)).await {
                 buf[..data.len()].copy_from_slice(&data);
@@ -83,6 +82,7 @@ mod rpc {
     use postcard_rpc::Key;
     use tokio::select;
     use tokio::sync::mpsc::Sender;
+
     use super::usb::UsbComm;
 
     pub async fn wire_worker(mut port: UsbComm, ctx: WireContext) {
