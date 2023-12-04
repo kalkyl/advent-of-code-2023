@@ -2,7 +2,9 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
-use aoc_2023_firmware::{bsp, rpc};
+use aoc_2023_firmware::bsp;
+use aoc_2023_firmware::rpc::RpcServer;
+use aoc_2023_firmware::usb::RawUsb;
 use aoc_2023_icd::day3::{Engine, EngineReq, EngineResp, Number, Symbol};
 use defmt::info;
 use embassy_executor::Spawner;
@@ -15,12 +17,12 @@ use {defmt_rtt as _, panic_probe as _};
 async fn main(spawner: Spawner) {
     let p = embassy_rp::init(Default::default());
     let mut board = bsp::init(p);
-    spawner.must_spawn(usb_task(rpc::Server::new(board.usb.reader, board.usb.writer)));
+    spawner.must_spawn(usb_task(RawUsb::new(board.usb.reader, board.usb.writer)));
     board.usb.usb.run().await;
 }
 
 #[embassy_executor::task]
-async fn usb_task(mut server: rpc::Server) {
+async fn usb_task(mut server: RawUsb) {
     loop {
         server.wait_connection().await;
         info!("Connected");

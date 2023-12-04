@@ -73,3 +73,44 @@ pub mod bsp {
         }
     }
 }
+
+pub mod usb {
+    use embassy_rp::peripherals::USB;
+    use embassy_rp::usb::{self, In, Out};
+    use embassy_usb::driver::{Endpoint as _, EndpointIn, EndpointOut};
+    use embedded_io_async::{ErrorKind, ErrorType, Read, Write};
+    pub struct RawUsb {
+        reader: usb::Endpoint<'static, USB, Out>,
+        writer: usb::Endpoint<'static, USB, In>,
+    }
+
+    impl RawUsb {
+        pub fn new(reader: usb::Endpoint<'static, USB, Out>, writer: usb::Endpoint<'static, USB, In>) -> Self {
+            Self { reader, writer }
+        }
+        pub async fn wait_connection(&mut self) {
+            self.reader.wait_enabled().await;
+        }
+    }
+
+    impl ErrorType for RawUsb {
+        type Error = ErrorKind;
+    }
+
+    impl Read for RawUsb {
+        async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+            self.reader.read(buf).await.map_err(|_| ErrorKind::BrokenPipe)
+        }
+    }
+
+    impl Write for RawUsb {
+        async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            for chunk in buf.chunks(64) {
+                self.writer.write(chunk).await.map_err(|_| ErrorKind::BrokenPipe)?;
+            }
+            Ok(buf.len())
+        }
+    }
+
+    impl super::rpc::RpcServer<1024, 4096> for RawUsb {}
+}
