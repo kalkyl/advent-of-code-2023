@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use tokio::select;
 use tokio::sync::mpsc::Sender;
 
-pub fn new<E: DeserializeOwned + Schema>(device: Device, err_uri_path: &str, outgoing_depth: usize) -> HostClient<E> {
+pub fn new_client<E: DeserializeOwned + Schema>(device: Device, err_uri_path: &str, outgoing_depth: usize) -> HostClient<E> {
     let port = UsbComm::new(device);
     let (client, wire) = HostClient::<E>::new_manual(err_uri_path, outgoing_depth);
     tokio::task::spawn(async move { wire_worker(port, wire).await });

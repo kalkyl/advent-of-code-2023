@@ -13,7 +13,7 @@ use tokio::fs;
 pub async fn main() -> Result<(), Box<dyn Error>> {
     let di = nusb::list_devices().unwrap().find(|d| d.vendor_id() == VID && d.product_id() == PID).expect("no device found");
     let device = di.open().expect("error opening device");
-    let client: HostClient<WireError> = rpc::new(device, "error", 8);
+    let client: HostClient<WireError> = rpc::new_client(device, "error", 8);
 
     let _ = client.send_resp::<Engine>(&EngineReq::Reset).await.unwrap();
     let mut parts: HashSet<Number> = HashSet::new();
