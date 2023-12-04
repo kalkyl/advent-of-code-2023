@@ -6,10 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-defmt = ["dep:defmt", "heapless/defmt-03"]
+defmt = ["dep:defmt", "heapless/defmt"]
 
 [dependencies]
 defmt = { version = "0.3", optional = true }
-heapless = { version = "0.8.0", features = ["serde"] }
-postcard = "1.0.8"
+heapless = { version = "0.7.0", features = ["serde"] }
 serde = { version = "1.0.193", default-features = false, features = ["derive"] }
+postcard = { version = "1.0.8", features = ["experimental-derive", "heapless"] }
+postcard-rpc = "0.3.1"

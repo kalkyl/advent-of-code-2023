@@ -1,6 +1,8 @@
 #![no_std]
 #![feature(type_alias_impl_trait)]
 
+pub mod rpc;
+
 pub mod bsp {
     use aoc_2023_icd::{PID, VID};
     use embassy_rp::peripherals::USB;

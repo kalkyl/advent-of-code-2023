@@ -12,4 +12,6 @@ aoc-2023-icd = { path = "../icd" }
 postcard = {version = "1.0.8", features = ["use-std"] }
 serde = "1.0.193"
 defmt = "0.3"
-heapless = { version = "0.8.0", features = ["serde"] }
+heapless = { version = "0.7.0", features = ["serde"] }
+postcard-rpc = { version = "0.3.1", features = ["use-std"] }
+cobs = "0.2.3"

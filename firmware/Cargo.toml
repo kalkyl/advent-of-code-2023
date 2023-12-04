@@ -26,7 +26,7 @@ futures = { version = "0.3.17", default-features = false, features = ["async-awa
 display-interface-spi = "0.4.1"
 embedded-graphics = "0.7.1"
 byte-slice-cast = { version = "1.2.0", default-features = false }
-heapless = "0.8"
+heapless = "0.7.0"
 
 embedded-hal-1 = { package = "embedded-hal", version = "=1.0.0-rc.2" }
 embedded-hal-async = "1.0.0-rc.2"
@@ -42,6 +42,7 @@ rand = { version = "0.8.5", default-features = false }
 postcard = { version = "1.0.8", features = ["defmt"] }
 serde = { version = "1.0.193", default-features = false, features = ["derive"] }
 aoc-2023-icd = { path = "../icd", features = ["defmt"] }
+postcard-rpc = { version = "0.3.1", features = ["defmt"] }
 
 [patch.crates-io]
 embassy-embedded-hal = { git = "https://github.com/embassy-rs/embassy", rev = "fe8c46bce329efe7921386dd46a493f607453bd8" }
